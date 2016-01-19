@@ -1,0 +1,75 @@
+// All 0xnumbers in hex, 2 bits per hex digit.
+// x and y are in the horizontal plane, z is up/down.
+{ 32bit x, 32bit y, 32bit offset } [65536],
+0x00000000, 0x00000000, 0x00000000,     // guard entry
+{
+    0xDEADBEEF, 0xFFFFFFFF,      // magic header, 2nd int is 0xFFFFFFFE in 1.29
+    32bit x, 32bit y,
+    { 8bit type, 8bit data } [32768],   // see BlocksData.xml
+    { 8bit elevation, 4bit humidity, 4bit temp, 0x0000 } [256]
+} [0..65536]
+
+
+// All data little-endian.
+// x and z are in the horizontal plane, y is up/down.
+
+// A single entry in directory of chunks
+struct DirectoryEntry
+{
+    int ChunkX;   // Chunk position, (1 unit equals 16 blocks, must be positive)
+    int ChunkZ;   // Chunk position, (1 unit equals 16 blocks, must be positive)
+    int Offset;   // Offset of chunk data from the start of file, in bytes
+}
+
+// The whole directory of chunks
+struct Directory
+{
+    DirectoryEntry Entries[65536];  // Directory entries, unused entries filled with 0 (-1 in 1.29 format)
+    DirectoryEntry Guard;           // Guard entry always filled with 0
+}
+
+// A single block
+struct Block        // OLD FORMAT (< 1.29)
+{
+    byte BlockType;  // Type of block (0-air, 1-bedrock, 2-dirt, 3-granite etc.)
+    byte BlockData;  // 4 low bits contain light level, 4 high bits contain block-specific data
+}
+struct NewBlock     // NEW FORMAT (>= 1.29)
+{
+    10bit type;     // block type: air, bedrock, planks etc
+    4bit light;     // illumination value
+    18bit data;     // block state: colour, rotation etc
+}
+
+// A single surface point
+struct SurfacePoint
+{
+    byte MaxHeight;      // Maximum height at this point (non-air blocks)
+    byte TempHumidity;   // 4 low bits contain temperature, 4 high bits contain humidity
+    byte Unused1;        // Currently unused (must be zero)
+    byte Unused2;        // Currently unused (must be zero)
+}
+
+// Chunk header
+struct ChunkHeader
+{
+    int Magic1;     // Must be 0xDEADBEEF  // EFBEADDE in little-endian!
+    int Magic2;     // Must be 0xFFFFFFFF
+    int ChunkX;     // Chunk position (1 unit equals 16 blocks, must be positive)
+    int ChunkZ;     // Chunk position (1 unit equals 16 blocks, must be positive)
+}
+
+// A single chunk
+struct Chunk
+{
+    ChunkHeader Header;           // Chunk header
+    Block Blocks[32768];          // Data of all blocks in chunk (16*16*128), in x/z/y order
+    SurfacePoint Surface[256];    // Data of all surface points in chunk (16*16), in x/z order
+}
+
+// The whole chunks.dat file
+struct ChunksFile
+{
+    Directory Dir;      // Chunks directory
+    Chunk Chunks[];     // Array of chunks, variable size (0 to 65536 max)
+}
