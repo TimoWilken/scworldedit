@@ -1,10 +1,9 @@
 #!/usr/bin/python
 
+import sys
 from struct import Struct
 from collections import namedtuple
 from itertools import product
-
-import sys
 
 
 Chunk = namedtuple('Chunk', 'x y blocks surface')
@@ -12,14 +11,28 @@ Block = namedtuple('Block', 'x y z type light state')
 SurfacePoint = namedtuple('SurfacePoint', 'x y elevation temperature humidity')
 
 
+def _extract_bits(n, n_bits, offset_from_lsb):
+    """Extract a number of bits from an integer.
+
+    Example:
+    >>> bin(_extract_bits(0b1101011001111010, n_bits=5, offset_from_lsb=7))
+    '0b1100'
+
+        0b1101011001111010 -> 0b01100
+              ^^^^^<- 7 ->
+
+    The bits marked with ^ will be extracted. The offset is counted from the
+    LSB, with the LSB itself having the offset 0.
+    """
+    bitmask = (2**n_bits - 1) << offset_from_lsb
+    return (n & bitmask) >> offset_from_lsb
+
+
 class ChunksDecoder:
     # width: x, height: y, depth: z; (x, y) are horizontal plane
     MAGIC = CHUNK_WIDTH = CHUNK_HEIGHT = CHUNK_DEPTH = NotImplemented
 
-    def _unpack_from_file(self, struct, fileobj):
-        return struct.unpack(fileobj.read(struct.size))
-
-    def read_chunks(filename):
+    def read_chunks(self, filename):
         """Read the chunks file and return all contained Chunks.
 
         A subclass must override this.
@@ -31,26 +44,20 @@ class Chunks128Decoder(ChunksDecoder):
     CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH = 16, 16, 128
     MAGIC = 0xFFFFFFFFDEADBEEF
 
-    direntry_struct = Struct('< 8x I')    # x, y, offset
-    chunkhdr_struct = Struct('< Q I I')   # magic, x, y
-    block_struct = Struct('< B B')        # type, data
-    sfcpoint_struct = Struct('< B B 2x')  # elevation, climate
-
     def read_chunks(self, filename):
         """Read the Chunks.dat file and return all contained Chunks."""
         with open(filename, 'rb') as chunksf:
-            direntries = []
+            direntries, entry_struct = [], Struct('<8xI')
             for _ in range(65536):
-                offset, *_ = \
-                    self._unpack_from_file(self.direntry_struct, chunksf)
+                offset, *_ = entry_struct.unpack_from(chunksf)
                 if offset:
                     direntries.append(offset)
 
             chunks = []
+            chunk_s, block_s, sfc_s = map(Struct, ['<QII', '<BB', '<BB2x'])
             for offset in direntries:
                 chunksf.seek(offset, 0)
-                magic, chk_x, chk_y = \
-                    self._unpack_from_file(self.chunkhdr_struct, chunksf)
+                magic, chk_x, chk_y = chunk_s.unpack_from(chunksf)
                 if magic != self.MAGIC:
                     raise ValueError('magic == 0x{:X}, expected 0x{:X}. '
                                      'This might be the wrong decoder'
@@ -59,17 +66,15 @@ class Chunks128Decoder(ChunksDecoder):
                 for x, y, z in product(range(self.CHUNK_WIDTH),
                                        range(self.CHUNK_HEIGHT),
                                        range(self.CHUNK_DEPTH)):
-                    btype, data = \
-                        self._unpack_from_file(self.block_struct, chunksf)
+                    btype, data = block_s.unpack_from(chunksf)
                     light = data & 0x0F         # extract four low bits
                     state = (data & 0xF0) >> 4  # extract four high bits
                     blocks.append(Block(x, y, z, btype, light, state))
                 for x, y in product(range(self.CHUNK_WIDTH),
                                     range(self.CHUNK_HEIGHT)):
-                    elev, climate = \
-                        self._unpack_from_file(self.sfcpoint_struct, chunksf)
-                    temp = climate & 0x0F             # extract four low bits
-                    humidity = (climate & 0xF0) >> 4  # extract four high bits
+                    elev, climate = sfc_s.unpack_from(chunksf)
+                    temp = _extract_bits(climate, 4, 0)
+                    humidity = _extract_bits(climate, 4, 4)
                     surface.append(SurfacePoint(x, y, elev, temp, humidity))
                 chunks.append(Chunk(chk_x, chk_y, blocks, surface))
         return chunks
@@ -81,27 +86,20 @@ class Chunks129Decoder(ChunksDecoder):
     DIRECTORY_SIZE = 12 * 65537
     MAGIC = 0xFFFFFFFEDEADBEEF
 
-    direntry_struct = Struct('< 8x i')   # x, y, offset
-    chunkhdr_struct = Struct('< Q 2I')   # magic, x, y
-    block_struct = Struct('< I')  # type (b0..9), light (10..13), data (14..31)
-    sfcpoint_struct = Struct('< 2B 2x')  # elevation, climate
-
     def read_chunks(self, filename):
         """Read the Chunks32.dat file and return all contained Chunks."""
         with open(filename, 'rb') as chunksf:
-            direntries = []
+            direntries, entry_struct = [], Struct('<8xi')
             for _ in range(65536):
-                index, *_ = \
-                    self._unpack_from_file(self.direntry_struct, chunksf)
+                index, *_ = entry_struct.unpack_from(chunksf)
                 if index != -1:
                     direntries.append(index)
 
             chunks = []
+            chunk_s, block_s, sfc_s = map(Struct, ['<QII', '<I', '<BB2x'])
             for index in direntries:
-                print('.', end='', file=sys.stderr, flush=True)
                 chunksf.seek(index*self.CHUNK_SIZE + self.DIRECTORY_SIZE, 0)
-                magic, chk_x, chk_y = \
-                    self._unpack_from_file(self.chunkhdr_struct, chunksf)
+                magic, chk_x, chk_y = chunk_s.unpack_from(chunksf)
                 if magic != self.MAGIC:
                     raise ValueError('magic == 0x{:X}, expected 0x{:X}. '
                                      'This might be the wrong decoder'
@@ -110,19 +108,17 @@ class Chunks129Decoder(ChunksDecoder):
                 for x, y, z in product(range(self.CHUNK_WIDTH),
                                        range(self.CHUNK_HEIGHT),
                                        range(self.CHUNK_DEPTH)):
-                    blk, *_ = \
-                        self._unpack_from_file(self.block_struct, chunksf)
+                    blk, *_ = block_s.unpack_from(chunksf)
                     # TODO: not sure if this is the right bit order.
-                    block_type = blk & (2**10-1)             # low  10 bits
-                    light = (blk & (0b1111 << 10)) >> 10     # mid   4 bits
-                    state = (blk & ((2**18-1) << 14)) >> 14  # high 18 bits
+                    block_type = _extract_bits(blk, 10, 0)
+                    light = _extract_bits(blk, 4, 10)
+                    state = _extract_bits(blk, 18, 14)
                     blocks.append(Block(x, y, z, block_type, light, state))
                 for x, y in product(range(self.CHUNK_WIDTH),
                                     range(self.CHUNK_HEIGHT)):
-                    elev, climate = \
-                        self._unpack_from_file(self.sfcpoint_struct, chunksf)
-                    temp = climate & 0x0F             # extract four low bits
-                    humidity = (climate & 0xF0) >> 4  # extract four high bits
+                    elev, climate = sfc_s.unpack_from(chunksf)
+                    temp = _extract_bits(climate, 4, 0)
+                    humidity = _extract_bits(climate, 4, 4)
                     surface.append(SurfacePoint(x, y, elev, temp, humidity))
                 chunks.append(Chunk(chk_x, chk_y, blocks, surface))
         return chunks
