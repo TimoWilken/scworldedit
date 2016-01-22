@@ -1,12 +1,10 @@
 #!/usr/bin/python
 
 import sys
-from itertools import product
 from array import array
 from collections import namedtuple
 
 import png
-# import cairo
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
@@ -70,10 +68,8 @@ def main():
         x_col, y_col, value_col = map(headers.index, ('x', 'y', val_head))
         data = HeatmapDataSet(
             HeatmapPoint(values[x_col], values[y_col], values[value_col])
-            for values in map(
-                lambda line: tuple(map(float, line.split(','))),
-                data_file
-            )
+            for values in map(lambda line: tuple(map(float, line.split(','))),
+                              data_file)
         )
     if out_filename == '@':
         HeatmapDisplay(data).show_all()
