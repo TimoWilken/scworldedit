@@ -5,8 +5,6 @@ from array import array
 from struct import Struct
 from collections import namedtuple
 
-import fn
-
 
 Chunk = namedtuple('Chunk', 'x y blocks surface')
 Block = namedtuple('Block', 'x y z type light state')
@@ -133,27 +131,26 @@ class ChunksDecoder:
             if index != self.INVALID_INDEX_VALUE
         ))
 
-    def read_blocks(self, filename):
+    def read_blocks(self, chunksf):
         """Read the block data from the chunks file.
 
         This calls the ChunksDecoder subclass's parse_block method to process
         each block. You probably want to override it to process custom data.
         See the parse_block docstring for more information.
         """
-        with open(filename, 'rb') as chunksf:
-            direntries = self.read_directory(chunksf)
-            for offset in direntries:
-                chunksf.seek(offset, 0)
-                magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
-                    chunksf.read(self._chunk_header_struct.size))
-                self._assert_magic(magic)
-                yield from (
-                    self.parse_block(i, chunk_x, chunk_y, data)
-                    for i, data in enumerate(self._block_struct.iter_unpack(
-                        chunksf.read(self.blocks_size)))
-                )
+        direntries = self.read_directory(chunksf)
+        for offset in direntries:
+            chunksf.seek(offset, 0)
+            magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
+                chunksf.read(self._chunk_header_struct.size))
+            self._assert_magic(magic)
+            yield from (
+                self.parse_block(i, chunk_x, chunk_y, data)
+                for i, data in enumerate(self._block_struct.iter_unpack(
+                    chunksf.read(self.blocks_size)))
+            )
 
-    def read_surface(self, filename):
+    def read_surface(self, chunksf):
         """Read the surface data from the chunks file.
 
         This calls the ChunksDecoder subclass's parse_surface_point method to
@@ -161,20 +158,19 @@ class ChunksDecoder:
         override it to process custom data. See the parse_surface_point
         docstring for more information.
         """
-        with open(filename, 'rb') as chunksf:
-            direntries = self.read_directory(chunksf)
-            for offset in direntries:
-                chunksf.seek(offset, 0)
-                magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
-                    chunksf.read(self._chunk_header_struct.size))
-                self._assert_magic(magic)
-                chunksf.seek(self.blocks_size, 1)
-                yield from (
-                    self.parse_surface_point(i, chunk_x, chunk_y, data)
-                    for i, data in enumerate(
-                        self._surface_point_struct.iter_unpack(
-                            chunksf.read(self.surface_size)))
-                )
+        direntries = self.read_directory(chunksf)
+        for offset in direntries:
+            chunksf.seek(offset, 0)
+            magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
+                chunksf.read(self._chunk_header_struct.size))
+            self._assert_magic(magic)
+            chunksf.seek(self.blocks_size, 1)
+            yield from (
+                self.parse_surface_point(i, chunk_x, chunk_y, data)
+                for i, data in enumerate(
+                    self._surface_point_struct.iter_unpack(
+                        chunksf.read(self.surface_size)))
+            )
 
     def parse_block(self, i, chunk_x, chunk_y, data):
         """Parse block data, returning a Block object.
@@ -286,31 +282,53 @@ class Chunks129Decoder(ChunksDecoder):
 def main():
     """The script's main entry point."""
     import csv
+    import os.path
+    from argparse import ArgumentParser, FileType, ArgumentError
 
-    try:
-        _, file_version, command, filename, out_filename = sys.argv
-    except TypeError:
-        print('Usage: chunks.py FILEVERSION COMMAND FILENAME OUTFILE',
-              file=sys.stderr)
-        return 255
-    if file_version == '1.29':
+    parser = ArgumentParser(description="Extract information from a "
+                            "Survivalcraft world's chunks file.")
+    v_arg = parser.add_argument('-V', '--file-version', default='auto')
+    parser.add_argument('-o', '--output-file', default=sys.stdout,
+                        type=FileType('wt'))
+    parser.add_argument('-f', '--chunks-file', default=sys.stdin,
+                        type=FileType('rb'))
+    parser.add_argument('extract_data', choices=('blocks', 'surface'))
+    args = parser.parse_args()
+
+    if args.file_version == 'auto':
+        chunks_fname = os.path.basename(args.chunks_file.name)
+        if chunks_fname == 'Chunks.dat':
+            decoder = Chunks128Decoder()
+        elif chunks_fname == 'Chunks32.dat':
+            decoder = Chunks129Decoder()
+        else:
+            raise ArgumentError(v_arg, 'Could not determine chunks file '
+                                'version automatically.')
+    elif args.file_version == '1.29':
         decoder = Chunks129Decoder()
-    elif file_version in map('1.{}'.format, range(4, 29)):
+    elif args.file_version in map('1.{}'.format, range(4, 29)):
         decoder = Chunks128Decoder()
     else:
-        raise ValueError('Bad file version: {}'.format(file_version))
+        raise ArgumentError(v_arg, 'Invalid chunks file version: {}. '
+                            'Supported versions are 1.4 to 1.29 or auto.'
+                            .format(args.file_version))
 
-    data_type = {'surface': SurfacePoint, 'blocks': Block}[command]
-    data = {
-        'surface': decoder.read_surface(filename),
-        'blocks': decoder.read_blocks(filename),
-    }[command]
-    with open(out_filename, 'w', newline='') as out_file:
-        csvwriter = csv.DictWriter(out_file, fieldnames=data_type._fields,
+    data_type = {'surface': SurfacePoint, 'blocks': Block}[args.extract_data]
+    data = {'surface': decoder.read_surface(args.chunks_file),
+            'blocks': decoder.read_blocks(args.chunks_file)}[args.extract_data]
+    try:
+        csvwriter = csv.DictWriter(args.output_file,
+                                   fieldnames=data_type._fields,
                                    quoting=csv.QUOTE_NONNUMERIC)
         csvwriter.writeheader()
         csvwriter.writerows(map(data_type._asdict, data))
+    finally:
+        args.chunks_file.close()
+        args.output_file.close()
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)
