@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import sys
+import csv
 from array import array
 from collections import namedtuple
 
@@ -64,13 +65,10 @@ def main():
         print('Pass @ as OUTFILE to see heatmap in a window.')
         return 255
     with open(in_filename, 'rt') as data_file:
-        headers = next(data_file).split(',')
-        x_col, y_col, value_col = map(headers.index, ('x', 'y', val_head))
-        data = HeatmapDataSet(
-            HeatmapPoint(values[x_col], values[y_col], values[value_col])
-            for values in map(lambda line: tuple(map(float, line.split(','))),
-                              data_file)
-        )
+        data_reader = csv.DictReader(data_file, quoting=csv.QUOTE_NONNUMERIC)
+        data = HeatmapDataSet(HeatmapPoint(int(row['x']), int(row['y']),
+                                           int(row[val_head]))
+                              for row in data_reader)
     if out_filename == '@':
         HeatmapDisplay(data).show_all()
         Gtk.main()

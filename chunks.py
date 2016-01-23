@@ -5,6 +5,8 @@ from array import array
 from struct import Struct
 from collections import namedtuple
 
+import fn
+
 
 Chunk = namedtuple('Chunk', 'x y blocks surface')
 Block = namedtuple('Block', 'x y z type light state')
@@ -79,8 +81,14 @@ class ChunksDecoder:
     @property
     def blocks_size(self):
         """Calculate the size, in bytes, of one chunk's blocks in the file."""
-        return (self._block_struct.size * self.CHUNK_WIDTH *
-                self.CHUNK_HEIGHT * self.CHUNK_DEPTH)
+        return (self.CHUNK_WIDTH * self.CHUNK_HEIGHT * self.CHUNK_DEPTH *
+                self._block_struct.size)
+
+    @property
+    def surface_size(self):
+        """Calculate the file size, in bytes, of a chunk's surface data."""
+        return (self.CHUNK_WIDTH * self.CHUNK_HEIGHT *
+                self._surface_point_struct.size)
 
     @property
     def directory_size(self):
@@ -90,10 +98,8 @@ class ChunksDecoder:
     @property
     def chunk_size(self):
         """Calculate the size, in bytes, of one chunk saved in the file."""
-        w, h, d = self.CHUNK_WIDTH, self.CHUNK_HEIGHT, self.CHUNK_DEPTH
         return (self._chunk_header_struct.size +
-                self._block_struct.size * w * h * d +
-                self._surface_point_struct.size * w * h)
+                self.blocks_size + self.surface_size)
 
     def offset_from_index(self, index):
         """Calculate the file offset of a chunk from its index.
@@ -120,10 +126,12 @@ class ChunksDecoder:
         reading the directory, the file object will not be closed, but it will
         have been advanced by self.directory_size bytes.
         """
-        return array('i', map(self.offset_from_file, filter(
-            lambda index: index != self.INVALID_INDEX_VALUE,
-            self._direntry_struct.iter_unpack(chkf.read(self.directory_size))
-        )))
+        return array('i', (
+            self.offset_from_index(index)
+            for index, in self._direntry_struct.iter_unpack(
+                chkf.read(self.directory_size))
+            if index != self.INVALID_INDEX_VALUE
+        ))
 
     def read_blocks(self, filename):
         """Read the block data from the chunks file.
@@ -143,8 +151,7 @@ class ChunksDecoder:
                 blocks.extend(
                     self.parse_block(i, chunk_x, chunk_y, data)
                     for i, data in enumerate(self._block_struct.iter_unpack(
-                        chunksf.read(self.CHUNK_WIDTH * self.CHUNK_HEIGHT *
-                                     self.CHUNK_DEPTH * self.block_s.size)))
+                        chunksf.read(self.blocks_size)))
                 )
         return blocks
 
@@ -169,8 +176,7 @@ class ChunksDecoder:
                     self.parse_surface_point(i, chunk_x, chunk_y, data)
                     for i, data in enumerate(
                         self._surface_point_struct.iter_unpack(
-                            chunksf.read(self.CHUNK_WIDTH * self.CHUNK_HEIGHT *
-                                         self.sfc_s.size)))
+                            chunksf.read(self.surface_size)))
                 )
         return surface
 
@@ -216,7 +222,7 @@ class Chunks128Decoder(ChunksDecoder):
     """Decoder for Chunks.dat files from Survivalcraft versions 1.4 to 1.28."""
 
     MAGIC, INVALID_INDEX_VALUE = 0xFFFFFFFFDEADBEEF, 0
-    _chunk_header_struct, _block_struct, _surface_point_struct = \
+    _chunk_header_struct, _block_struct, _surface_point_struct, \
         _direntry_struct = map(Struct, ['<QII', '<BB', '<BB2x', '<8xI'])
 
     def offset_from_index(self, offset):
@@ -252,7 +258,7 @@ class Chunks129Decoder(ChunksDecoder):
     """
 
     MAGIC, INVALID_INDEX_VALUE = 0xFFFFFFFEDEADBEEF, -1
-    _chunk_header_struct, _block_struct, _surface_point_struct = \
+    _chunk_header_struct, _block_struct, _surface_point_struct, \
         _direntry_struct = map(Struct, ['<QII', '<I', '<BB2x', '<8xi'])
 
     def offset_from_index(self, index):
@@ -283,26 +289,31 @@ class Chunks129Decoder(ChunksDecoder):
 
 def main():
     """The script's main entry point."""
+    import csv
+
     try:
-        _, file_version, command, filename = sys.argv
+        _, file_version, command, filename, out_filename = sys.argv
     except TypeError:
-        print('Usage: chunks.py FILEVERSION COMMAND FILENAME', file=sys.stderr)
+        print('Usage: chunks.py FILEVERSION COMMAND FILENAME OUTFILE',
+              file=sys.stderr)
         return 255
     if file_version == '1.29':
         decoder = Chunks129Decoder()
     elif file_version in map('1.{}'.format, range(4, 29)):
         decoder = Chunks128Decoder()
     else:
-        raise ValueError('Bad version: {}'.format(file_version))
+        raise ValueError('Bad file version: {}'.format(file_version))
 
-    if command == 'surface':
-        for surface_point in decoder.read_surface(filename):
-            print(*surface_point, sep=',')
-    elif command == 'blocks':
-        for block in decoder.read_blocks(filename):
-            print(*block, sep=',')
-    else:
-        raise ValueError('Invalid command: {}'.format(command))
+    data_type = {'surface': SurfacePoint, 'blocks': Block}[command]
+    data = {
+        'surface': decoder.read_surface(filename),
+        'blocks': decoder.read_blocks(filename),
+    }[command]
+    with open(out_filename, 'w', newline='') as out_file:
+        csvwriter = csv.DictWriter(out_file, fieldnames=data_type._fields,
+                                   quoting=csv.QUOTE_NONNUMERIC)
+        csvwriter.writeheader()
+        csvwriter.writerows(map(data_type._asdict, data))
 
 
 if __name__ == '__main__':
