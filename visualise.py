@@ -29,13 +29,20 @@ class HeatmapDataSet:
             HeatmapPoint(x - self.bounds.x, y - self.bounds.y, value)
             for x, y, value in points
         ]
-        self.relative_points = [
-            HeatmapPoint(x, y, (value-self.bounds.min) / self.bounds.range)
-            for x, y, value in self.points
-        ]
-        self.by_coordinates = {(x, y): value for x, y, value in self.points}
-        self.by_coordinates_relative = {(x, y): val
-                                        for x, y, val in self.relative_points}
+
+    @property
+    def relative_points(self):
+        for x, y, value in self.points:
+            relative_value = (value-self.bounds.min) / self.bounds.range
+            yield HeatmapPoint(x, y, relative_value)
+
+    @property
+    def by_coordinates(self):
+        return {(x, y): value for x, y, value in self.points}
+
+    @property
+    def by_coordinates_relative(self):
+        return {(x, y): val for x, y, val in self.relative_points}
 
 
 class HeatmapDisplay(Gtk.Window):
