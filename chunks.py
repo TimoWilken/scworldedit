@@ -142,18 +142,16 @@ class ChunksDecoder:
         """
         with open(filename, 'rb') as chunksf:
             direntries = self.read_directory(chunksf)
-            blocks = []
             for offset in direntries:
                 chunksf.seek(offset, 0)
                 magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
                     chunksf.read(self._chunk_header_struct.size))
                 self._assert_magic(magic)
-                blocks.extend(
+                yield from (
                     self.parse_block(i, chunk_x, chunk_y, data)
                     for i, data in enumerate(self._block_struct.iter_unpack(
                         chunksf.read(self.blocks_size)))
                 )
-        return blocks
 
     def read_surface(self, filename):
         """Read the surface data from the chunks file.
@@ -165,20 +163,18 @@ class ChunksDecoder:
         """
         with open(filename, 'rb') as chunksf:
             direntries = self.read_directory(chunksf)
-            surface = []
             for offset in direntries:
                 chunksf.seek(offset, 0)
                 magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
                     chunksf.read(self._chunk_header_struct.size))
                 self._assert_magic(magic)
                 chunksf.seek(self.blocks_size, 1)
-                surface.extend(
+                yield from (
                     self.parse_surface_point(i, chunk_x, chunk_y, data)
                     for i, data in enumerate(
                         self._surface_point_struct.iter_unpack(
                             chunksf.read(self.surface_size)))
                 )
-        return surface
 
     def parse_block(self, i, chunk_x, chunk_y, data):
         """Parse block data, returning a Block object.
