@@ -12,7 +12,7 @@ from gi.repository import Gtk
 
 
 HeatmapPoint = namedtuple('HeatmapPoint', ['x', 'y', 'value'])
-Bounds = namedtuple('Bounds', 'x y min width height range')
+Bounds = namedtuple('Bounds', 'x y width height min max range')
 
 
 class HeatmapDataSet:
@@ -23,26 +23,25 @@ class HeatmapDataSet:
         w = max(pt.x for pt in points) - x
         h = max(pt.y for pt in points) - y
         min_val = min(pt.value for pt in points)
-        val_rng = max(pt.value for pt in points) - min_val
-        self.bounds = Bounds(x, y, min_val, w, h, val_rng)
+        max_val = max(pt.value for pt in points)
+        val_rng = max_val - min_val
+        self.bounds = Bounds(x, y, w, h, min_val, max_val, val_rng)
         self.points = [
             HeatmapPoint(x - self.bounds.x, y - self.bounds.y, value)
             for x, y, value in points
         ]
 
-    @property
-    def relative_points(self):
+    def data_transform(self, *, relative=False, normalise=False):
         for x, y, value in self.points:
-            relative_value = (value-self.bounds.min) / self.bounds.range
-            yield HeatmapPoint(x, y, relative_value)
+            if normalise:
+                value -= self.bounds.min
+            if relative:
+                value /= self.bounds.range if normalise else self.bounds.max
+            yield HeatmapPoint(x, y, value)
 
-    @property
-    def by_coordinates(self):
-        return {(x, y): value for x, y, value in self.points}
-
-    @property
-    def by_coordinates_relative(self):
-        return {(x, y): val for x, y, val in self.relative_points}
+    def by_coordinates(self, **transforms):
+        return {(x, y): value
+                for x, y, value in self.data_transform(**transforms)}
 
 
 class HeatmapDisplay(Gtk.Window):
@@ -82,10 +81,12 @@ def main():
     else:
         writer = png.Writer(width=data.bounds.width, height=data.bounds.height,
                             greyscale=True)
+        coord_data = data.by_coordinates(normalise=val_head == 'elevation',
+                                         relative=True)
         rows = [
             array('B', (
-                int(255 * data.by_coordinates_relative[(x, y)])
-                if (x, y) in data.by_coordinates_relative else 0
+                int(255 * coord_data[(x, y)])
+                if (x, y) in coord_data else 0
                 for x in range(data.bounds.width)
             ))
             for y in range(data.bounds.height)
