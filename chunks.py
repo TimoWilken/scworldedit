@@ -283,15 +283,15 @@ def main():
     """The script's main entry point."""
     import csv
     import os.path
-    from argparse import ArgumentParser, FileType, ArgumentError
+    from argparse import ArgumentParser, ArgumentError
 
     parser = ArgumentParser(description="Extract information from a "
                             "Survivalcraft world's chunks file.")
     v_arg = parser.add_argument('-V', '--file-version', default='auto')
-    parser.add_argument('-o', '--output-file', default=sys.stdout,
-                        type=FileType('wt'))
-    parser.add_argument('-f', '--chunks-file', default=sys.stdin,
-                        type=FileType('rb'))
+    parser.add_argument('-o', '--output-file', default=None,
+                        help='The CSV file to write to. Defaults to stdout.')
+    parser.add_argument('-f', '--chunks-file', default=None,
+                        help='The chunks file to read from. Default: stdin.')
     parser.add_argument('extract_data', choices=('blocks', 'surface'))
     args = parser.parse_args()
 
@@ -314,17 +314,17 @@ def main():
                             .format(args.file_version))
 
     data_type = {'surface': SurfacePoint, 'blocks': Block}[args.extract_data]
-    data = {'surface': decoder.read_surface(args.chunks_file),
-            'blocks': decoder.read_blocks(args.chunks_file)}[args.extract_data]
-    try:
-        csvwriter = csv.DictWriter(args.output_file,
-                                   fieldnames=data_type._fields,
+    with open(args.chunks_file, 'rb') \
+            if args.chunks_file is not None else sys.stdin as chunks_file:
+        data = {'surface': decoder.read_surface(chunks_file),
+                'blocks': decoder.read_blocks(chunks_file)}[args.extract_data]
+    with open(args.output_file, 'wt', newlines='') \
+            if args.output_file is not None else sys.stdout \
+            as csvfile:
+        csvwriter = csv.DictWriter(csvfile, fieldnames=data_type._fields,
                                    quoting=csv.QUOTE_NONNUMERIC)
         csvwriter.writeheader()
         csvwriter.writerows(map(data_type._asdict, data))
-    finally:
-        args.chunks_file.close()
-        args.output_file.close()
 
 
 if __name__ == '__main__':
