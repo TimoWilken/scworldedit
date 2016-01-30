@@ -295,8 +295,8 @@ def main():
     parser.add_argument('extract_data', choices=('blocks', 'surface'))
     args = parser.parse_args()
 
-    if args.file_version == 'auto':
-        chunks_fname = os.path.basename(args.chunks_file.name)
+    if args.file_version == 'auto' and args.chunks_file is not None:
+        chunks_fname = os.path.basename(args.chunks_file)
         if chunks_fname == 'Chunks.dat':
             decoder = Chunks128Decoder()
         elif chunks_fname == 'Chunks32.dat':
@@ -318,13 +318,13 @@ def main():
             if args.chunks_file is not None else sys.stdin as chunks_file:
         data = {'surface': decoder.read_surface(chunks_file),
                 'blocks': decoder.read_blocks(chunks_file)}[args.extract_data]
-    with open(args.output_file, 'wt', newlines='') \
-            if args.output_file is not None else sys.stdout \
-            as csvfile:
-        csvwriter = csv.DictWriter(csvfile, fieldnames=data_type._fields,
-                                   quoting=csv.QUOTE_NONNUMERIC)
-        csvwriter.writeheader()
-        csvwriter.writerows(map(data_type._asdict, data))
+        with open(args.output_file, 'wt', newline='') \
+                if args.output_file is not None else sys.stdout \
+                as csvfile:
+            csvwriter = csv.DictWriter(csvfile, fieldnames=data_type._fields,
+                                       quoting=csv.QUOTE_NONNUMERIC)
+            csvwriter.writeheader()
+            csvwriter.writerows(map(data_type._asdict, data))
 
 
 if __name__ == '__main__':
