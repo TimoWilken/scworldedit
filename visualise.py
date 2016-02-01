@@ -16,32 +16,29 @@ Bounds = namedtuple('Bounds', 'x y width height min max range')
 
 
 class HeatmapDataSet:
-    def __init__(self, points):
+    def __init__(self, points, min_value=None, max_value=None):
         points = list(points)
         x = min(pt.x for pt in points)
         y = min(pt.y for pt in points)
         w = max(pt.x for pt in points) - x
         h = max(pt.y for pt in points) - y
-        min_val = min(pt.value for pt in points)
-        max_val = max(pt.value for pt in points)
-        val_rng = max_val - min_val
-        self.bounds = Bounds(x, y, w, h, min_val, max_val, val_rng)
-        self.points = [
-            HeatmapPoint(x - self.bounds.x, y - self.bounds.y, value)
-            for x, y, value in points
-        ]
+        min_val = (min(pt.value for pt in points)
+                   if min_value is None else min_value)
+        max_val = (max(pt.value for pt in points)
+                   if max_value is None else max_value)
+        self.bounds = Bounds(x, y, w, h, min_val, max_val, max_val - min_val)
+        self.points = [HeatmapPoint(x, y, value) for x, y, value in points]
 
-    def data_transform(self, *, relative=False, normalise=False):
+    def data_transform(self, *, relative=False):
         for x, y, value in self.points:
-            if normalise:
-                value -= self.bounds.min
+            value -= self.bounds.min
             if relative:
-                value /= self.bounds.range if normalise else self.bounds.max
-            yield HeatmapPoint(x, y, value)
+                value /= self.bounds.range
+            yield HeatmapPoint(x - self.bounds.x, y - self.bounds.y, value)
 
     def by_coordinates(self, **transforms):
-        return {(x, y): value
-                for x, y, value in self.data_transform(**transforms)}
+        data = self.data_transform(**transforms)
+        return {(x, y): value for x, y, value in data}
 
 
 class HeatmapDisplay(Gtk.Window):
@@ -62,36 +59,67 @@ class HeatmapDisplay(Gtk.Window):
             cr.fill()
 
 
+def handle_args():
+    """Parse and return the script's command-line arguments using argparse."""
+    from argparse import ArgumentParser
+
+    p = ArgumentParser(description='Create heatmaps from values associated '
+                                   'with coordinates.')
+    p.add_argument('-x', '--x-column', default='x', metavar='COL',
+                   help='The CSV column holding X coordinates for the '
+                        'heatmap. Defaults to "x".')
+    p.add_argument('-y', '--y-column', default='y', metavar='COL',
+                   help='The CSV column holding Y coordinates for the '
+                        'heatmap. Defaults to "y".')
+    p.add_argument('-c', '--value-column', default='value', metavar='COL',
+                   help='The CSV column holding values for the heatmap. '
+                        'Defaults to "value".')
+    p.add_argument('-0', '--min-value', metavar='MIN', type=int,
+                   help="The smallest possible value, used to calibrate the "
+                        "heatmap colouring. If not given, uses the smallest "
+                        "value found in the given data.")
+    p.add_argument('-9', '--max-value', metavar='MAX', type=int,
+                   help="The largest possible value, to calibrate the heatmap "
+                        "colouring. If not given, uses the largest value "
+                        "found in the given data.")
+    p.add_argument('-o', '--output-file', metavar='FILE',
+                   help='The PNG file to write the heatmap to. If not given, '
+                        'shows the heatmap in a GTK window.')
+    p.add_argument('-f', '--data-file', metavar='FILE',
+                   help='The CSV file to read data from. If not given or "-", '
+                        'defaults to standard input.')
+    return p.parse_args()
+
+
 def main():
     """The script's main entry point."""
-    try:
-        _, in_filename, val_head, out_filename = sys.argv
-    except TypeError:
-        print('Usage: visualise.py INFILE VALUEHEAD OUTFILE', file=sys.stderr)
-        print('Pass @ as OUTFILE to see heatmap in a window.')
-        return 255
-    with open(in_filename, 'rt') as data_file:
+    args = handle_args()
+    with (open(args.data_file, 'rt')
+          if args.data_file not in (None, '-')
+          else sys.stdin) as data_file:
         data_reader = csv.DictReader(data_file, quoting=csv.QUOTE_NONNUMERIC)
-        data = HeatmapDataSet(HeatmapPoint(int(row['x']), int(row['y']),
-                                           int(row[val_head]))
-                              for row in data_reader)
-    if out_filename == '@':
+        data = HeatmapDataSet(
+            (HeatmapPoint(round(row[args.x_column]), round(row[args.y_column]),
+                          round(row[args.value_column]))
+             for row in data_reader),
+            min_value=args.min_value, max_value=args.max_value
+        )
+    if args.output_file is None:
         HeatmapDisplay(data).show_all()
         Gtk.main()
     else:
         writer = png.Writer(width=data.bounds.width, height=data.bounds.height,
                             greyscale=True)
-        coord_data = data.by_coordinates(normalise=val_head == 'elevation',
-                                         relative=True)
+        coord_data = data.by_coordinates(relative=True)
         rows = [
             array('B', (
-                int(255 * coord_data[(x, y)])
+                round(255 * coord_data[(x, y)])
                 if (x, y) in coord_data else 0
                 for x in range(data.bounds.width)
             ))
             for y in range(data.bounds.height)
         ]
-        with open(out_filename, 'wb') as outfile:
+        with open(args.output_file, 'wb') as outfile:
             writer.write(outfile, rows)
 
 
