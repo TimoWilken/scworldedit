@@ -11,7 +11,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
 
-HeatmapPoint = namedtuple('HeatmapPoint', ['x', 'y', 'value'])
+HeatmapPoint = namedtuple('HeatmapPoint', 'x y value')
 Bounds = namedtuple('Bounds', 'x y width height min max range')
 
 
