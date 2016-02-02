@@ -31,7 +31,19 @@ def read_block_data(filename):
 
 def main():
     """The script's main entry point."""
-    blocks = read_block_data('BlocksData.xml')
+    import sys
+    try:
+        _, filename, block_name = sys.argv
+    except ValueError:
+        print('Usage: blocks.py FILENAME BLOCKNAME', file=sys.stderr)
+        sys.exit(1)
+    blocks = read_block_data(filename)
+    matched_blocks = [blk for blk in blocks
+                      if block_name.lower() in blk.name.lower()]
+    for block in matched_blocks:
+        print(block.name)
+        for k, v in block._asdict().items():
+            print(' '*3, k, '=', v)
 
 
 if __name__ == '__main__':
