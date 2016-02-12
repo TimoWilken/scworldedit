@@ -1,5 +1,10 @@
 #!/usr/bin/python
 
+"""Decode Survivalcraft's Chunks.dat and Chunks32.dat files.
+
+Have a look at ChunkDecoder's doctring for more information.
+"""
+
 import sys
 from array import array
 from struct import Struct
