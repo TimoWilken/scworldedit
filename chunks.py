@@ -314,18 +314,17 @@ def main():
                             .format(args.file_version))
 
     data_type = {'surface': SurfacePoint, 'blocks': Block}[args.extract_data]
+    data_reader = getattr(decoder, 'read_{}'.format(args.extract_data))
     with (open(args.chunks_file, 'rb')
           if args.chunks_file not in (None, '-')
-          else sys.stdin) as chunks_file:
-        data = {'surface': decoder.read_surface(chunks_file),
-                'blocks': decoder.read_blocks(chunks_file)}[args.extract_data]
-        with (open(args.output_file, 'wt', newline='')
-              if args.output_file is not None
-              else sys.stdout) as csvfile:
-            csvwriter = csv.DictWriter(csvfile, fieldnames=data_type._fields,
-                                       quoting=csv.QUOTE_NONNUMERIC)
-            csvwriter.writeheader()
-            csvwriter.writerows(map(data_type._asdict, data))
+          else sys.stdin) as chunks_file, \
+         (open(args.output_file, 'wt', newline='')
+          if args.output_file is not None
+          else sys.stdout) as csvfile:
+        csvwriter = csv.DictWriter(csvfile, fieldnames=data_type._fields,
+                                   quoting=csv.QUOTE_NONNUMERIC)
+        csvwriter.writeheader()
+        csvwriter.writerows(map(data_type._asdict, data_reader(chunks_file)))
 
 
 if __name__ == '__main__':
