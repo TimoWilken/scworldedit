@@ -317,7 +317,7 @@ def main():
     data_reader = getattr(decoder, 'read_{}'.format(args.extract_data))
     with (open(args.chunks_file, 'rb')
           if args.chunks_file not in (None, '-')
-          else sys.stdin) as chunks_file, \
+          else sys.stdin.buffer) as chunks_file, \
          (open(args.output_file, 'wt', newline='')
           if args.output_file is not None
           else sys.stdout) as csvfile:
