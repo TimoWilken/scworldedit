@@ -17,7 +17,7 @@ def read_block_data(filename):
             raise ValueError('Root element may only contain <Block /> tags.')
         yield Block(id=int(child.get('BlockId')),
                     name=child.get('Name'),
-                    power=ToolPower(*map(float, map(child.get, (
+                    power=ToolPower._make(map(float, map(child.get, (
                         'QuarryPower', 'ShovelPower', 'HackPower',
                         'WeaponPower', 'AverageToolLongevity')))),
                     resilience=float(child.get('DigResilience')),
