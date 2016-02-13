@@ -6,9 +6,6 @@ from array import array
 from collections import namedtuple
 
 import png
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
 
 
 HeatmapPoint = namedtuple('HeatmapPoint', 'x y value')
@@ -41,24 +38,6 @@ class HeatmapDataSet:
         return {(x, y): value for x, y, value in data}
 
 
-class HeatmapDisplay(Gtk.Window):
-    def __init__(self, data_set):
-        self.data_set = data_set
-        super().__init__(title="Visualiser")
-        self.set_default_size(640, 480)
-        self.connect('destroy', Gtk.main_quit)
-        canvas = Gtk.DrawingArea()
-        self.add(canvas)
-        canvas.connect('draw', self.on_draw)
-        canvas.show()
-
-    def on_draw(self, w, cr):
-        for pt in self.data_set.relative_points:
-            cr.set_source_rgb(pt.value, pt.value, pt.value)
-            cr.rectangle(pt.x, pt.y, 1, 1)   # (x, y, w, h)
-            cr.fill()
-
-
 def handle_args():
     """Parse and return the script's command-line arguments using argparse."""
     from argparse import ArgumentParser
@@ -82,8 +61,8 @@ def handle_args():
         help='The largest possible value, to calibrate the heatmap colouring. '
              'If not given, uses the largest value found in the given data.')
     add('-o', '--output-file', metavar='FILE',
-        help='The PNG file to write the heatmap to. If not given, shows the '
-             'heatmap in a GTK window.')
+        help='The PNG file to write the heatmap to. If not given, prints PNG '
+             'file to stdout.')
     add('-f', '--data-file', metavar='FILE',
         help='The CSV file to read data from. If not given or "-", defaults '
              'to standard input.')
@@ -103,23 +82,17 @@ def main():
              for row in data_reader),
             min_value=args.min_value, max_value=args.max_value
         )
-    if args.output_file is None:
-        HeatmapDisplay(data).show_all()
-        Gtk.main()
-    else:
-        writer = png.Writer(width=data.bounds.width, height=data.bounds.height,
-                            greyscale=True)
-        coord_data = data.by_coordinates(relative=True)
-        rows = [
-            array('B', (
-                round(255 * coord_data[(x, y)])
-                if (x, y) in coord_data else 0
-                for x in range(data.bounds.width)
-            ))
+    writer = png.Writer(width=data.bounds.width, height=data.bounds.height,
+                        greyscale=True)
+    coord_data = data.by_coordinates(relative=True)
+    with (open(args.output_file, 'wb') if args.output_file is not None
+          else sys.stdout.buffer) as outfile:
+        writer.write(outfile, (
+            array('B', (round(255 * coord_data[(x, y)])
+                        if (x, y) in coord_data else 0
+                        for x in range(data.bounds.width)))
             for y in range(data.bounds.height)
-        ]
-        with open(args.output_file, 'wb') as outfile:
-            writer.write(outfile, rows)
+        ))
 
 
 if __name__ == '__main__':
