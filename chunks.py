@@ -305,7 +305,12 @@ def main():
     import os.path
 
     args = handle_args()
-    if args.file_version == 'auto' and args.chunks_file is not None:
+    if args.file_version == 'auto':
+        if args.chunks_file is None:
+            print("Version autodetection uses the chunk file's name. A "
+                  "filename must be passed to enable autodetection.",
+                  file=sys.stderr)
+            return 2
         chunks_fname = os.path.basename(args.chunks_file)
         if chunks_fname == 'Chunks.dat':
             decoder = Chunks128Decoder()
