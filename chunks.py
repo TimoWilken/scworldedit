@@ -6,6 +6,7 @@ Have a look at ChunkDecoder's doctring for more information.
 """
 
 import sys
+from os import SEEK_CUR
 from array import array
 from struct import Struct
 from collections import namedtuple
@@ -129,6 +130,7 @@ class ChunksDecoder:
         reading the directory, the file object will not be closed, but it will
         have been advanced by self.directory_size bytes.
         """
+        chkf.seek(0)
         return array('i', (
             self.offset_from_index(index)
             for index, in self._direntry_struct.iter_unpack(
@@ -136,16 +138,17 @@ class ChunksDecoder:
             if index != self.INVALID_INDEX_VALUE
         ))
 
-    def read_blocks(self, chunksf):
+    def read_blocks(self, chunksf, directory=None):
         """Read the block data from the chunks file.
 
         This calls the ChunksDecoder subclass's parse_block method to process
         each block. You probably want to override it to process custom data.
         See the parse_block docstring for more information.
         """
-        direntries = self.read_directory(chunksf)
-        for offset in direntries:
-            chunksf.seek(offset, 0)
+        if directory is None:
+            directory = self.read_directory(chunksf)
+        for offset in directory:
+            chunksf.seek(offset)
             magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
                 chunksf.read(self._chunk_header_struct.size))
             self._assert_magic(magic)
@@ -155,7 +158,7 @@ class ChunksDecoder:
                     chunksf.read(self.blocks_size)))
             )
 
-    def read_surface(self, chunksf):
+    def read_surface(self, chunksf, directory=None):
         """Read the surface data from the chunks file.
 
         This calls the ChunksDecoder subclass's parse_surface_point method to
@@ -163,13 +166,14 @@ class ChunksDecoder:
         override it to process custom data. See the parse_surface_point
         docstring for more information.
         """
-        direntries = self.read_directory(chunksf)
-        for offset in direntries:
-            chunksf.seek(offset, 0)
+        if directory is None:
+            directory = self.read_directory(chunksf)
+        for offset in directory:
+            chunksf.seek(offset)
             magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
                 chunksf.read(self._chunk_header_struct.size))
             self._assert_magic(magic)
-            chunksf.seek(self.blocks_size, 1)
+            chunksf.seek(self.blocks_size, SEEK_CUR)
             yield from (
                 self.parse_surface_point(i, chunk_x, chunk_y, data)
                 for i, data in enumerate(
@@ -295,6 +299,11 @@ def handle_args():
         help='The CSV file to write to. Defaults to stdout.')
     add('-f', '--chunks-file', metavar='FILE',
         help='The chunks file to read from. Default: stdin.')
+    add('-p', '--plane', metavar='PLANE',
+        help='Only extract blocks from one x-y-plane. If passed an integer, '
+             'blocks whose z coordinate is equal to PLANE are extracted. If '
+             'given an integer preceded by "+" or "-", blocks at an offset of '
+             'PLANE from the world\'s elevation are extracted.')
     add('extract_data', choices=('blocks', 'surface'))
     return parser.parse_args()
 
@@ -337,10 +346,25 @@ def main():
          (open(args.output_file, 'wt', newline='')
           if args.output_file is not None
           else sys.stdout) as csvfile:
+        if args.plane and args.extract_data == 'blocks':
+            if any(map(args.plane.startswith, '+-')):
+                rel_offset = int(args.plane)
+                directory = decoder.read_directory(chunks_file)
+                offsets = {(x, y): elev + rel_offset
+                           for x, y, elev, *_ in
+                           decoder.read_surface(chunks_file, directory)}
+                data = filter(lambda b: b.z == offsets[(b.x, b.y)],
+                              data_reader(chunks_file, directory))
+            else:
+                z_coord = int(args.plane)
+                data = filter(lambda b: b.z == z_coord,
+                              data_reader(chunks_file))
+        else:
+            data = data_reader(chunks_file)
         csvwriter = csv.DictWriter(csvfile, fieldnames=data_type._fields,
                                    quoting=csv.QUOTE_NONNUMERIC)
         csvwriter.writeheader()
-        csvwriter.writerows(map(data_type._asdict, data_reader(chunks_file)))
+        csvwriter.writerows(map(data_type._asdict, data))
 
 
 if __name__ == '__main__':
