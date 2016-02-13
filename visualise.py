@@ -32,7 +32,7 @@ class HeatmapDataSet:
     def data_transform(self, *, relative=False):
         for x, y, value in self.points:
             value -= self.bounds.min
-            if relative:
+            if relative and self.bounds.range:
                 value /= self.bounds.range
             yield HeatmapPoint(x - self.bounds.x, y - self.bounds.y, value)
 
