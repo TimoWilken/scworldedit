@@ -2,8 +2,10 @@
 Chunks.dat
 Chunks32.dat
 *.png
+*.csv
 
 # Python bytecode etc
 __pycache__/
 *.py[cod]
 *$py.class
+
