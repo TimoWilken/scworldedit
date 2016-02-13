@@ -1,0 +1,9 @@
+# input and output files
+Chunks.dat
+Chunks32.dat
+*.png
+
+# Python bytecode etc
+__pycache__/
+*.py[cod]
+*$py.class
