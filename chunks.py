@@ -284,22 +284,27 @@ class Chunks129Decoder(ChunksDecoder):
         ))
 
 
+def handle_args():
+    """Parse and return the script's command-line arguments using argparse."""
+    from argparse import ArgumentParser
+    parser = ArgumentParser(description="Extract information from a "
+                                        "Survivalcraft world's chunks file.")
+    add = parser.add_argument
+    add('-V', '--file-version', default='auto')
+    add('-o', '--output-file', metavar='FILE',
+        help='The CSV file to write to. Defaults to stdout.')
+    add('-f', '--chunks-file', metavar='FILE',
+        help='The chunks file to read from. Default: stdin.')
+    add('extract_data', choices=('blocks', 'surface'))
+    return parser.parse_args()
+
+
 def main():
     """The script's main entry point."""
     import csv
     import os.path
-    from argparse import ArgumentParser, ArgumentError
 
-    parser = ArgumentParser(description="Extract information from a "
-                            "Survivalcraft world's chunks file.")
-    v_arg = parser.add_argument('-V', '--file-version', default='auto')
-    parser.add_argument('-o', '--output-file',
-                        help='The CSV file to write to. Defaults to stdout.')
-    parser.add_argument('-f', '--chunks-file',
-                        help='The chunks file to read from. Default: stdin.')
-    parser.add_argument('extract_data', choices=('blocks', 'surface'))
-    args = parser.parse_args()
-
+    args = handle_args()
     if args.file_version == 'auto' and args.chunks_file is not None:
         chunks_fname = os.path.basename(args.chunks_file)
         if chunks_fname == 'Chunks.dat':
@@ -307,16 +312,17 @@ def main():
         elif chunks_fname == 'Chunks32.dat':
             decoder = Chunks129Decoder()
         else:
-            raise ArgumentError(v_arg, 'Could not determine chunks file '
-                                'version automatically.')
+            print('Could not determine chunks file version automatically.',
+                  file=sys.stderr)
+            return 2
     elif args.file_version == '1.29':
         decoder = Chunks129Decoder()
     elif args.file_version in map('1.{}'.format, range(4, 29)):
         decoder = Chunks128Decoder()
     else:
-        raise ArgumentError(v_arg, 'Invalid chunks file version: {}. '
-                            'Supported versions are 1.4 to 1.29 or auto.'
-                            .format(args.file_version))
+        print('Invalid chunks file version: {}. Supported versions are 1.4 to '
+              '1.29 or auto.'.format(args.file_version), file=sys.stderr)
+        return 1
 
     data_type = {'surface': SurfacePoint, 'blocks': Block}[args.extract_data]
     data_reader = getattr(decoder, 'read_{}'.format(args.extract_data))

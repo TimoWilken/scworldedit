@@ -62,33 +62,32 @@ class HeatmapDisplay(Gtk.Window):
 def handle_args():
     """Parse and return the script's command-line arguments using argparse."""
     from argparse import ArgumentParser
-
-    p = ArgumentParser(description='Create heatmaps from values associated '
-                                   'with coordinates.')
-    p.add_argument('-x', '--x-column', default='x', metavar='COL',
-                   help='The CSV column holding X coordinates for the '
-                        'heatmap. Defaults to "x".')
-    p.add_argument('-y', '--y-column', default='y', metavar='COL',
-                   help='The CSV column holding Y coordinates for the '
-                        'heatmap. Defaults to "y".')
-    p.add_argument('-c', '--value-column', default='value', metavar='COL',
-                   help='The CSV column holding values for the heatmap. '
-                        'Defaults to "value".')
-    p.add_argument('-0', '--min-value', metavar='MIN', type=int,
-                   help="The smallest possible value, used to calibrate the "
-                        "heatmap colouring. If not given, uses the smallest "
-                        "value found in the given data.")
-    p.add_argument('-9', '--max-value', metavar='MAX', type=int,
-                   help="The largest possible value, to calibrate the heatmap "
-                        "colouring. If not given, uses the largest value "
-                        "found in the given data.")
-    p.add_argument('-o', '--output-file', metavar='FILE',
-                   help='The PNG file to write the heatmap to. If not given, '
-                        'shows the heatmap in a GTK window.')
-    p.add_argument('-f', '--data-file', metavar='FILE',
-                   help='The CSV file to read data from. If not given or "-", '
-                        'defaults to standard input.')
-    return p.parse_args()
+    parser = ArgumentParser(description='Create heatmaps from values '
+                                        'associated with coordinates.')
+    add = parser.add_argument
+    add('-x', '--x-column', default='x', metavar='COL',
+        help='The CSV column holding X coordinates for the heatmap. Defaults '
+             'to "x".')
+    add('-y', '--y-column', default='y', metavar='COL',
+        help='The CSV column holding Y coordinates for the heatmap. Defaults '
+             'to "y".')
+    add('-c', '--value-column', default='value', metavar='COL',
+        help='The CSV column holding values for the heatmap. Defaults to '
+             '"value".')
+    add('-0', '--min-value', metavar='MIN', type=int,
+        help='The smallest possible value, used to calibrate the heatmap '
+             'colouring. If not given, uses the smallest value found in the '
+             'given data.')
+    add('-9', '--max-value', metavar='MAX', type=int,
+        help='The largest possible value, to calibrate the heatmap colouring. '
+             'If not given, uses the largest value found in the given data.')
+    add('-o', '--output-file', metavar='FILE',
+        help='The PNG file to write the heatmap to. If not given, shows the '
+             'heatmap in a GTK window.')
+    add('-f', '--data-file', metavar='FILE',
+        help='The CSV file to read data from. If not given or "-", defaults '
+             'to standard input.')
+    return parser.parse_args()
 
 
 def main():
