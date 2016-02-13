@@ -4,6 +4,7 @@ import sys
 import csv
 from array import array
 from collections import namedtuple
+from itertools import chain
 
 import png
 
@@ -82,17 +83,15 @@ def main():
              for row in data_reader),
             min_value=args.min_value, max_value=args.max_value
         )
-    writer = png.Writer(width=data.bounds.width, height=data.bounds.height,
-                        greyscale=True)
+    writer = png.Writer(width=data.bounds.width, height=data.bounds.height)
     coord_data = data.by_coordinates(relative=True)
     with (open(args.output_file, 'wb') if args.output_file is not None
           else sys.stdout.buffer) as outfile:
-        writer.write(outfile, (
-            array('B', (round(255 * coord_data[(x, y)])
-                        if (x, y) in coord_data else 0
-                        for x in range(data.bounds.width)))
-            for y in range(data.bounds.height)
-        ))
+        writer.write(outfile, (array('B', chain.from_iterable(
+                                   (round(255 * coord_data[(x, y)]),) * 3
+                                   if (x, y) in coord_data else (0, 0, 0)
+                                   for x in range(data.bounds.width))
+                               ) for y in range(data.bounds.height)))
 
 
 if __name__ == '__main__':
