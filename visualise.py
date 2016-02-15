@@ -39,19 +39,81 @@ class HeatmapDataSet:
         return {(x, y): value for x, y, value in data}
 
 
+class ColorMap:
+    """The base color map.
+
+    Custom color maps should inherit from this class and override the
+    color_heatmap(self, dataset) method.
+    """
+
+    @staticmethod
+    def _parse_html_color(color):
+        r"""Parse a color conforming to the regex #?\d\d?\d\d?\d\d?\d?\d?.
+
+        The parsed color may be in one of the following formats, each with an
+        optional hash ("#") character in front:
+            ["#RRGGBB", "#RGB", "#RRGGBBAA", "#RGBA"].
+        """
+        color = color.translate({ord('#'): None})
+        cl = {8: 2, 6: 2, 4: 1, 3: 1}[len(color)]  # len of one RGBA component
+        r, g, b, a = color[:cl], color[cl:2*cl], color[2*cl:3*cl], color[3*cl:]
+        return int(r, 16), int(g, 16), int(b, 16), int(a, 16) if a else 255
+
+    def color_heatmap(self, dataset):
+        """Transform heatmap data into pixel rows to write to a PNG file."""
+        return NotImplemented
+
+
+class AbsoluteColorMap(ColorMap):
+    """A user-defined colormap mapping absolute values to colors."""
+
+    def __init__(self, colors):
+        """Initialise a new color map."""
+        self.default = self._parse_html_color(colors.get('default', '#0000'))
+        self.colormap = {int(k): self._parse_html_color(c)
+                         for k, c in colors.items() if k.isdigit()}
+
+    def color_heatmap(self, dataset):
+        """Transform heatmap data into pixel rows to write to a PNG file."""
+        coord_data = dataset.by_coordinates(relative=False)
+        for y in range(dataset.bounds.height):
+            yield array('B', chain.from_iterable(
+                self.colormap.get(coord_data[(x, y)], self.default)
+                if (x, y) in coord_data else (0, 0, 0, 0)
+                for x in range(dataset.bounds.width)
+            ))
+
+
+class DefaultColorMap(ColorMap):
+    """The default greyscale colormap to use if no user-provided one exists."""
+
+    def color_heatmap(self, dataset):
+        """Transform heatmap data into pixel rows to write to a PNG file."""
+        coord_data = dataset.by_coordinates(relative=True)
+        for y in range(dataset.bounds.height):
+            yield array('B', map(round, chain.from_iterable(
+                (*((255 * coord_data[(x, y)],) * 3), 255)
+                if (x, y) in coord_data else (0, 0, 0, 0)
+                for x in range(dataset.bounds.width)
+            )))
+
+
 def handle_args():
     """Parse and return the script's command-line arguments using argparse."""
     from argparse import ArgumentParser
+    from configparser import ConfigParser, ExtendedInterpolation
+    Args = namedtuple('Args', 'x_column y_column value_column min_value '
+                              'max_value output_file data_file color_map')
     parser = ArgumentParser(description='Create heatmaps from values '
                                         'associated with coordinates.')
     add = parser.add_argument
-    add('-x', '--x-column', default='x', metavar='COL',
+    add('-x', '--x-column', metavar='COL',
         help='The CSV column holding X coordinates for the heatmap. Defaults '
              'to "x".')
-    add('-y', '--y-column', default='y', metavar='COL',
+    add('-y', '--y-column', metavar='COL',
         help='The CSV column holding Y coordinates for the heatmap. Defaults '
              'to "y".')
-    add('-c', '--value-column', default='value', metavar='COL',
+    add('-c', '--value-column', metavar='COL',
         help='The CSV column holding values for the heatmap. Defaults to '
              '"value".')
     add('-0', '--min-value', metavar='MIN', type=int,
@@ -65,9 +127,42 @@ def handle_args():
         help='The PNG file to write the heatmap to. If not given, prints PNG '
              'file to stdout.')
     add('-f', '--data-file', metavar='FILE',
-        help='The CSV file to read data from. If not given or "-", defaults '
-             'to standard input.')
-    return parser.parse_args()
+        help='The CSV file to read data from. If FILE is not given or "-", '
+             'defaults to standard input.')
+    add('-m', '--color-map', metavar='FILE',
+        help='Use a color map stored in FILE to convert values to colors. A '
+             'color map is a simple YAML file with two sections (options and '
+             'colors). The options section defines overrides for command-line '
+             'argument defaults. The colors section maps values (INI keys) to '
+             'RGB colors (INI values). By default, this script uses a simple '
+             'greyscale color map. If FILE is -, reads color map from stdin.')
+    pargs = parser.parse_args()
+
+    # Normal dicts don't provide a getint method. Because we only use empty
+    # alternative dicts, this doesn't need to return a dict member. The get
+    # method is provided by the parent dict.
+    class EmptyDict(dict):
+        def getint(self, _, default=None):
+            return default
+
+    defaults = EmptyDict()
+    if pargs.color_map:
+        cm_parser = ConfigParser(inline_comment_prefixes=('//',),
+                                 interpolation=ExtendedInterpolation())
+        with (open(pargs.color_map, 'rt') if pargs.color_map != '-'
+              else sys.stdin) as cm_file:
+            cm_parser.read_file(cm_file)
+        if cm_parser.has_section('options'):
+            defaults = cm_parser['options']
+    return Args(x_column=pargs.x_column or defaults.get('x_column', 'x'),
+                y_column=pargs.y_column or defaults.get('y_column', 'y'),
+                value_column=(pargs.value_column or
+                              defaults.get('value_column', 'value')),
+                min_value=pargs.min_value or defaults.getint('min_value'),
+                max_value=pargs.max_value or defaults.getint('max_value'),
+                output_file=pargs.output_file or defaults.get('output_file'),
+                data_file=pargs.data_file or defaults.get('data_file'),
+                color_map=cm_parser['colors'] if pargs.color_map else None)
 
 
 def main():
@@ -83,15 +178,13 @@ def main():
              for row in data_reader),
             min_value=args.min_value, max_value=args.max_value
         )
-    writer = png.Writer(width=data.bounds.width, height=data.bounds.height)
-    coord_data = data.by_coordinates(relative=True)
+    colormap = (DefaultColorMap() if args.color_map is None
+                else AbsoluteColorMap(args.color_map))
+    writer = png.Writer(width=data.bounds.width, height=data.bounds.height,
+                        alpha=True)
     with (open(args.output_file, 'wb') if args.output_file is not None
           else sys.stdout.buffer) as outfile:
-        writer.write(outfile, (array('B', chain.from_iterable(
-                                   (round(255 * coord_data[(x, y)]),) * 3
-                                   if (x, y) in coord_data else (0, 0, 0)
-                                   for x in range(data.bounds.width))
-                               ) for y in range(data.bounds.height)))
+        writer.write(outfile, colormap.color_heatmap(data))
 
 
 if __name__ == '__main__':
