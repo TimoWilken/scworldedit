@@ -1,12 +1,14 @@
 #!/usr/bin/python
 
+"""Visualise three-dimensional integer data using heatmaps."""
+
 import sys
-import csv
 from array import array
 from collections import namedtuple
+from csv import QUOTE_NONNUMERIC, DictReader as CSVDictReader
 from itertools import chain
 
-import png
+from png import Writer as PNGWriter
 
 
 HeatmapPoint = namedtuple('HeatmapPoint', 'x y value')
@@ -14,8 +16,11 @@ Bounds = namedtuple('Bounds', 'x y width height min max range')
 
 
 class HeatmapDataSet:
+    """Hold heatmap data and normalise it on request."""
+
     def __init__(self, points, min_value=None, max_value=None):
-        points = list(points)
+        """Initialise a new heatmap's data."""
+        points = tuple(points)
         x = min(pt.x for pt in points)
         y = min(pt.y for pt in points)
         w = max(pt.x for pt in points) - x
@@ -28,6 +33,7 @@ class HeatmapDataSet:
         self.points = [HeatmapPoint(x, y, value) for x, y, value in points]
 
     def data_transform(self, *, relative=False):
+        """Generate normalised data."""
         for x, y, value in self.points:
             value -= self.bounds.min
             if relative and self.bounds.range:
@@ -35,6 +41,10 @@ class HeatmapDataSet:
             yield HeatmapPoint(x - self.bounds.x, y - self.bounds.y, value)
 
     def by_coordinates(self, **transforms):
+        """Index heatmap data by coordinates.
+
+        Any keyword arguments are passed unchanged to self.data_transform.
+        """
         data = self.data_transform(**transforms)
         return {(x, y): value for x, y, value in data}
 
@@ -171,7 +181,7 @@ def main():
     with (open(args.data_file, 'rt')
           if args.data_file not in (None, '-')
           else sys.stdin) as data_file:
-        data_reader = csv.DictReader(data_file, quoting=csv.QUOTE_NONNUMERIC)
+        data_reader = CSVDictReader(data_file, quoting=QUOTE_NONNUMERIC)
         data = HeatmapDataSet(
             (HeatmapPoint(round(row[args.x_column]), round(row[args.y_column]),
                           round(row[args.value_column]))
@@ -180,8 +190,8 @@ def main():
         )
     colormap = (DefaultColorMap() if args.color_map is None
                 else AbsoluteColorMap(args.color_map))
-    writer = png.Writer(width=data.bounds.width, height=data.bounds.height,
-                        alpha=True)
+    writer = PNGWriter(width=data.bounds.width, height=data.bounds.height,
+                       alpha=True)
     with (open(args.output_file, 'wb') if args.output_file is not None
           else sys.stdout.buffer) as outfile:
         writer.write(outfile, colormap.color_heatmap(data))

@@ -6,10 +6,10 @@ Have a look at ChunkDecoder's doctring for more information.
 """
 
 import sys
-from os import SEEK_CUR
 from array import array
-from struct import Struct
 from collections import namedtuple
+from struct import Struct
+from os import SEEK_CUR
 
 
 Chunk = namedtuple('Chunk', 'x y blocks surface')
@@ -294,7 +294,9 @@ def handle_args():
     parser = ArgumentParser(description="Extract information from a "
                                         "Survivalcraft world's chunks file.")
     add = parser.add_argument
-    add('-V', '--file-version', default='auto')
+    add('-V', '--file-version', default='auto', metavar='VERSION',
+        help='Specify the version of Survivalcraft that wrote the given '
+             'chunks file.')
     add('-o', '--output-file', metavar='FILE',
         help='The CSV file to write to. Defaults to stdout.')
     add('-f', '--chunks-file', metavar='FILE',
@@ -303,8 +305,10 @@ def handle_args():
         help='Only extract blocks from one x-y-plane. If passed an integer, '
              'blocks whose z coordinate is equal to PLANE are extracted. If '
              'given an integer preceded by "+" or "-", blocks at an offset of '
-             'PLANE from the world\'s elevation are extracted.')
-    add('extract_data', choices=('blocks', 'surface'))
+             'PLANE from the world\'s elevation are extracted. Does nothing '
+             'if surface points are extracted.')
+    add('extract_data', choices=('blocks', 'surface'),
+        help='The type of data to extract from the chunks file.')
     return parser.parse_args()
 
 
