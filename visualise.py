@@ -166,15 +166,24 @@ def handle_args():
             cm_parser.read_file(cm_file)
         if cm_parser.has_section('options'):
             defaults = cm_parser['options']
-    return Args(x_column=pargs.x_column or defaults.get('x_column', 'x'),
-                y_column=pargs.y_column or defaults.get('y_column', 'y'),
-                value_column=(pargs.value_column or
-                              defaults.get('value_column', 'value')),
-                min_value=pargs.min_value or defaults.getint('min_value'),
-                max_value=pargs.max_value or defaults.getint('max_value'),
-                output_file=pargs.output_file or defaults.get('output_file'),
-                data_file=pargs.data_file or defaults.get('data_file'),
-                color_map=cm_parser['colors'] if pargs.color_map else None)
+
+    def fallback(*choices):
+        for choice in choices:
+            if choice is not None:
+                return choice
+        return None
+
+    return Args(
+        x_column=fallback(pargs.x_column, defaults.get('x_column'), 'x'),
+        y_column=fallback(pargs.y_column, defaults.get('y_column'), 'y'),
+        value_column=fallback(pargs.value_column, defaults.get('value_column'),
+                              'value'),
+        min_value=fallback(pargs.min_value, defaults.getint('min_value')),
+        max_value=fallback(pargs.max_value, defaults.getint('max_value')),
+        output_file=fallback(pargs.output_file, defaults.get('output_file')),
+        data_file=fallback(pargs.data_file, defaults.get('data_file')),
+        color_map=cm_parser['colors'] if pargs.color_map else None
+    )
 
 
 def main():
