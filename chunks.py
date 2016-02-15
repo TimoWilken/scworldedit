@@ -2,7 +2,7 @@
 
 """Decode Survivalcraft's Chunks.dat and Chunks32.dat files.
 
-Have a look at ChunkDecoder's doctring for more information.
+Have a look at ChunkDecoder's docstring for more information.
 """
 
 import sys
