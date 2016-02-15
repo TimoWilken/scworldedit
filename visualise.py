@@ -3,6 +3,7 @@
 """Visualise three-dimensional integer data using heatmaps."""
 
 import sys
+from abc import ABCMeta, abstractmethod
 from array import array
 from collections import namedtuple
 from csv import QUOTE_NONNUMERIC, DictReader as CSVDictReader
@@ -49,7 +50,7 @@ class HeatmapDataSet:
         return {(x, y): value for x, y, value in data}
 
 
-class ColorMap:
+class ColorMap(metaclass=ABCMeta):
     """The base color map.
 
     Custom color maps should inherit from this class and override the
@@ -69,6 +70,7 @@ class ColorMap:
         r, g, b, a = color[:cl], color[cl:2*cl], color[2*cl:3*cl], color[3*cl:]
         return int(r, 16), int(g, 16), int(b, 16), int(a, 16) if a else 255
 
+    @abstractmethod
     def color_heatmap(self, dataset):
         """Transform heatmap data into pixel rows to write to a PNG file."""
         return NotImplemented

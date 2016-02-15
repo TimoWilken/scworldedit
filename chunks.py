@@ -6,6 +6,7 @@ Have a look at ChunkDecoder's doctring for more information.
 """
 
 import sys
+from abc import ABCMeta, abstractmethod
 from array import array
 from collections import namedtuple
 from struct import Struct
@@ -34,7 +35,7 @@ def extract_bits(n, n_bits, offset_from_lsb):
     return (n & bitmask) >> offset_from_lsb
 
 
-class ChunksDecoder:
+class ChunksDecoder(metaclass=ABCMeta):
     """The base class for chunk file decoders.
 
     A world is three-dimensional, therefore it has x, y and z axes. In this
@@ -105,6 +106,7 @@ class ChunksDecoder:
         return (self._chunk_header_struct.size +
                 self.blocks_size + self.surface_size)
 
+    @abstractmethod
     def offset_from_index(self, index):
         """Calculate the file offset of a chunk from its index.
 
@@ -181,6 +183,7 @@ class ChunksDecoder:
                         chunksf.read(self.surface_size)))
             )
 
+    @abstractmethod
     def parse_block(self, i, chunk_x, chunk_y, data):
         """Parse block data, returning a Block object.
 
@@ -200,6 +203,7 @@ class ChunksDecoder:
         w, h, d = self.CHUNK_WIDTH, self.CHUNK_HEIGHT, self.CHUNK_DEPTH
         return Block(i//h//d + chunk_x*w, (i//d) % w + chunk_y*h, i % d, *data)
 
+    @abstractmethod
     def parse_surface_point(self, i, chunk_x, chunk_y, data):
         """Parse surface data, returning a SurfacePoint object.
 
