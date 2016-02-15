@@ -6,10 +6,7 @@ import sys
 from abc import ABCMeta, abstractmethod
 from array import array
 from collections import namedtuple
-from csv import QUOTE_NONNUMERIC, DictReader as CSVDictReader
 from itertools import chain
-
-from png import Writer as PNGWriter
 
 
 HeatmapPoint = namedtuple('HeatmapPoint', 'x y value')
@@ -188,6 +185,9 @@ def handle_args():
 
 def main():
     """The script's main entry point."""
+    from csv import QUOTE_NONNUMERIC, DictReader as CSVDictReader
+    from png import Writer as PNGWriter
+
     args = handle_args()
     with (open(args.data_file, 'rt')
           if args.data_file not in (None, '-')

@@ -50,9 +50,9 @@ class ChunksDecoder(metaclass=ABCMeta):
     offset_from_index methods to get a complete decoder. Other methods should
     not need to be overridden.
 
-    Values for MAGIC, INVALID_INDEX_VALUE and the *_struct members must be
-    provided in subclasses. Those members are initialised to NotImplemented in
-    this base class.
+    Values for MAGIC, INVALID_INDEX_VALUE, SUPPORTED_VERSIONS, FILE_NAME and
+    the *_struct members must be provided in subclasses. Those members are
+    initialised to NotImplemented in this base class.
 
     Constants:
 
@@ -62,10 +62,19 @@ class ChunksDecoder(metaclass=ABCMeta):
     ChunksDecoder.
 
     MAGIC:
-    The 'magic number' in a chunk's header. It depends on the file format.
+    The 'magic number' in a chunk's header. It depends on the version of
+    Survivalcraft that wrote the file.
 
     INVALID_INDEX_VALUE:
     The value for the index in the chunk directory for an unused entry.
+
+    SUPPORTED_VERSIONS:
+    The versions of Survivalcraft that write chunks files the decoder
+    understands.
+
+    FILE_NAME:
+    The basename of the chunks file that the supported versions of
+    Survivalcraft write to. This is used for version autodetection.
 
     _{chunk_header, block, surface_point, direntry}_struct:
     The struct.Struct instances that define the arrangement of fields for a
@@ -79,8 +88,8 @@ class ChunksDecoder(metaclass=ABCMeta):
 
     # width: x, height: y, depth: z; (x, y) are horizontal plane
     CHUNK_WIDTH, CHUNK_HEIGHT, CHUNK_DEPTH = 16, 16, 128
-    MAGIC = INVALID_INDEX_VALUE = NotImplemented
-    _chunk_header_struct = _block_struct = _surface_point_struct = \
+    MAGIC = INVALID_INDEX_VALUE = SUPPORTED_VERSIONS = FILE_NAME = \
+        _chunk_header_struct = _block_struct = _surface_point_struct = \
         _direntry_struct = NotImplemented
 
     @property
@@ -226,9 +235,10 @@ class ChunksDecoder(metaclass=ABCMeta):
 class Chunks128Decoder(ChunksDecoder):
     """Decoder for Chunks.dat files from Survivalcraft versions 1.4 to 1.28."""
 
-    MAGIC, INVALID_INDEX_VALUE = 0xFFFFFFFFDEADBEEF, 0
+    MAGIC, INVALID_INDEX_VALUE, FILE_NAME = 0xFFFFFFFFDEADBEEF, 0, 'Chunks.dat'
+    SUPPORTED_VERSIONS = tuple(map('1.{}'.format, range(4, 29)))
     _chunk_header_struct, _block_struct, _surface_point_struct, \
-        _direntry_struct = map(Struct, ['<QII', '<BB', '<BB2x', '<8xI'])
+        _direntry_struct = map(Struct, ['<QII', '<BB', '<BB2x', '<8xi'])
 
     def offset_from_index(self, offset):
         """Calculate the file offset of a chunk from its index.
@@ -263,6 +273,7 @@ class Chunks129Decoder(ChunksDecoder):
     """
 
     MAGIC, INVALID_INDEX_VALUE = 0xFFFFFFFEDEADBEEF, -1
+    FILE_NAME, SUPPORTED_VERSIONS = 'Chunks32.dat', ('1.29',)
     _chunk_header_struct, _block_struct, _surface_point_struct, \
         _direntry_struct = map(Struct, ['<QII', '<I', '<BB2x', '<8xi'])
 
@@ -292,13 +303,21 @@ class Chunks129Decoder(ChunksDecoder):
         ))
 
 
-def handle_args():
-    """Parse and return the script's command-line arguments using argparse."""
+def handle_args(decoders):
+    """Parse and return the script's command-line arguments using argparse.
+
+    This needs a `decoders' argument to restrict the possible values to the
+    -V/--file-version argument.
+    """
     from argparse import ArgumentParser
     parser = ArgumentParser(description="Extract information from a "
                                         "Survivalcraft world's chunks file.")
     add = parser.add_argument
+    version_choices = 'auto',
+    for decoder in decoders:
+        version_choices += decoder.SUPPORTED_VERSIONS
     add('-V', '--file-version', default='auto', metavar='VERSION',
+        choices=version_choices,
         help='Specify the version of Survivalcraft that wrote the given '
              'chunks file.')
     add('-o', '--output-file', metavar='FILE',
@@ -318,33 +337,36 @@ def handle_args():
 
 def main():
     """The script's main entry point."""
-    import csv
-    import os.path
+    from csv import QUOTE_NONNUMERIC, DictWriter as CSVDictWriter
+    from os.path import basename
 
-    args = handle_args()
+    decoders = Chunks128Decoder, Chunks129Decoder
+
+    args = handle_args(decoders)
     if args.file_version == 'auto':
         if args.chunks_file is None:
-            print("Version autodetection uses the chunk file's name. A "
-                  "filename must be passed to enable autodetection.",
+            print("Version autodetection uses the chunk file's name. -f/"
+                  '--chunks-file must be passed to enable autodetection.',
                   file=sys.stderr)
             return 2
-        chunks_fname = os.path.basename(args.chunks_file)
-        if chunks_fname == 'Chunks.dat':
-            decoder = Chunks128Decoder()
-        elif chunks_fname == 'Chunks32.dat':
-            decoder = Chunks129Decoder()
+        chunks_fname = basename(args.chunks_file)
+        for decoder_type in decoders:
+            if chunks_fname == decoder_type.FILE_NAME:
+                decoder = decoder_type()
+                break
         else:
             print('Could not determine chunks file version automatically.',
                   file=sys.stderr)
             return 2
-    elif args.file_version == '1.29':
-        decoder = Chunks129Decoder()
-    elif args.file_version in map('1.{}'.format, range(4, 29)):
-        decoder = Chunks128Decoder()
     else:
-        print('Invalid chunks file version: {}. Supported versions are 1.4 to '
-              '1.29 or auto.'.format(args.file_version), file=sys.stderr)
-        return 1
+        for decoder_type in decoders:
+            if args.file_version in decoder_type.SUPPORTED_VERSIONS:
+                decoder = decoder_type()
+                break
+        else:
+            print('Survivalcraft version "{}" is not supported.'
+                  .format(args.file_version), file=sys.stderr)
+            return 1
 
     data_type = {'surface': SurfacePoint, 'blocks': Block}[args.extract_data]
     data_reader = getattr(decoder, 'read_{}'.format(args.extract_data))
@@ -369,8 +391,8 @@ def main():
                               data_reader(chunks_file))
         else:
             data = data_reader(chunks_file)
-        csvwriter = csv.DictWriter(csvfile, fieldnames=data_type._fields,
-                                   quoting=csv.QUOTE_NONNUMERIC)
+        csvwriter = CSVDictWriter(csvfile, fieldnames=data_type._fields,
+                                  quoting=QUOTE_NONNUMERIC)
         csvwriter.writeheader()
         csvwriter.writerows(map(data_type._asdict, data))
 
