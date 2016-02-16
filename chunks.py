@@ -313,11 +313,8 @@ def handle_args(decoders, custom_args=None):
     parser = ArgumentParser(description="Extract information from a "
                                         "Survivalcraft world's chunks file.")
     add = parser.add_argument
-    version_choices = 'auto',
-    for decoder in decoders:
-        version_choices += decoder.SUPPORTED_VERSIONS
     add('-V', '--file-version', default='auto', metavar='VERSION',
-        choices=version_choices,
+        choices=sum((d.SUPPORTED_VERSIONS for d in decoders), ('auto',)),
         help='Specify the version of Survivalcraft that wrote the given '
              'chunks file.')
     add('-o', '--output-file', metavar='FILE',
