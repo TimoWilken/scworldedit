@@ -4,8 +4,10 @@ Chunks32.dat
 *.png
 *.csv
 
+# testing files
+nosetests.json
+
 # Python bytecode etc
 __pycache__/
 *.py[cod]
 *$py.class
-
