@@ -303,7 +303,7 @@ class Chunks129Decoder(ChunksDecoder):
         ))
 
 
-def handle_args(decoders):
+def handle_args(decoders, custom_args=None):
     """Parse and return the script's command-line arguments using argparse.
 
     This needs a `decoders' argument to restrict the possible values to the
@@ -332,7 +332,7 @@ def handle_args(decoders):
              'if surface points are extracted.')
     add('extract_data', choices=('blocks', 'surface'),
         help='The type of data to extract from the chunks file.')
-    return parser.parse_args()
+    return parser.parse_args(custom_args)
 
 
 def main():

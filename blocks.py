@@ -32,16 +32,26 @@ def read_block_data(filename):
                     nutrition=float(child.get('NutritionalValue')))
 
 
-def main():
-    """The script's main entry point."""
+def handle_args(custom_args=None):
+    """Parse and return the script's command-line arguments."""
+    Args = namedtuple('Args', 'filename block_name')
     try:
-        _, filename, block_name = sys.argv
+        if custom_args is not None:
+            filename, block_name = custom_args
+        else:
+            _, filename, block_name = sys.argv
     except ValueError:
         print('Usage: blocks.py FILENAME BLOCKNAME', file=sys.stderr)
-        return 1
-    blocks = read_block_data(filename)
+        raise
+    return Args(filename, block_name)
+
+
+def main():
+    """The script's main entry point."""
+    args = handle_args()
+    blocks = read_block_data(args.filename)
     matched_blocks = [blk for blk in blocks
-                      if block_name.lower() in blk.name.lower()]
+                      if args.block_name.lower() in blk.name.lower()]
     for block in matched_blocks:
         print(block.name)
         for k, v in block._asdict().items():

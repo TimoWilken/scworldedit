@@ -109,7 +109,7 @@ class DefaultColorMap(ColorMap):
             )))
 
 
-def handle_args():
+def handle_args(custom_args=None):
     """Parse and return the script's command-line arguments using argparse."""
     from argparse import ArgumentParser
     from configparser import ConfigParser, ExtendedInterpolation
@@ -147,7 +147,7 @@ def handle_args():
              'argument defaults. The colors section maps values (INI keys) to '
              'RGB colors (INI values). By default, this script uses a simple '
              'greyscale color map. If FILE is -, reads color map from stdin.')
-    pargs = parser.parse_args()
+    pargs = parser.parse_args(custom_args)
 
     # Normal dicts don't provide a getint method. Because we only use empty
     # alternative dicts, this doesn't need to return a dict member. The get
