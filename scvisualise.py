@@ -1,118 +1,20 @@
 #!/usr/bin/python
 
-"""Visualise three-dimensional integer data using heatmaps."""
+"""Script to visualise CSV data using a heatmap."""
 
 import sys
-from abc import ABCMeta, abstractmethod
-from array import array
+from argparse import ArgumentParser
 from collections import namedtuple
-from itertools import chain
+from configparser import ConfigParser, ExtendedInterpolation
+from csv import QUOTE_NONNUMERIC, DictReader as CSVDictReader
+from png import Writer as PNGWriter
 
-
-HeatmapPoint = namedtuple('HeatmapPoint', 'x y value')
-Bounds = namedtuple('Bounds', 'x y width height min max range')
-
-
-class HeatmapDataSet:
-    """Hold heatmap data and normalise it on request."""
-
-    def __init__(self, points, min_value=None, max_value=None):
-        """Initialise a new heatmap's data."""
-        points = tuple(points)
-        x = min(pt.x for pt in points)
-        y = min(pt.y for pt in points)
-        w = max(pt.x for pt in points) - x
-        h = max(pt.y for pt in points) - y
-        min_val = (min(pt.value for pt in points)
-                   if min_value is None else min_value)
-        max_val = (max(pt.value for pt in points)
-                   if max_value is None else max_value)
-        self.bounds = Bounds(x, y, w, h, min_val, max_val, max_val - min_val)
-        self.points = [HeatmapPoint(x, y, value) for x, y, value in points]
-
-    def data_transform(self, *, relative=False):
-        """Generate normalised data."""
-        for x, y, value in self.points:
-            value -= self.bounds.min
-            if relative and self.bounds.range:
-                value /= self.bounds.range
-            yield HeatmapPoint(x - self.bounds.x, y - self.bounds.y, value)
-
-    def by_coordinates(self, **transforms):
-        """Index heatmap data by coordinates.
-
-        Any keyword arguments are passed unchanged to self.data_transform.
-        """
-        data = self.data_transform(**transforms)
-        return {(x, y): value for x, y, value in data}
-
-
-class ColorMap(metaclass=ABCMeta):
-    """The base color map.
-
-    Custom color maps should inherit from this class and override the
-    color_heatmap(self, dataset) method.
-    """
-
-    @staticmethod
-    def _parse_html_color(color):
-        r"""Parse a color conforming to the regex #?\d\d?\d\d?\d\d?\d?\d?.
-
-        The parsed color may be in one of the following formats, each with an
-        optional hash ("#") character in front:
-            ["#RRGGBB", "#RGB", "#RRGGBBAA", "#RGBA"].
-        """
-        color = color.translate({ord('#'): None})
-        cl = {8: 2, 6: 2, 4: 1, 3: 1}[len(color)]  # len of one RGBA component
-        r, g, b, a = color[:cl], color[cl:2*cl], color[2*cl:3*cl], color[3*cl:]
-        if cl == 1:
-            r, g, b, a = map(lambda c: 2*c, (r, g, b, a))
-        return int(r, 16), int(g, 16), int(b, 16), int(a, 16) if a else 255
-
-    @abstractmethod
-    def color_heatmap(self, dataset):
-        """Transform heatmap data into pixel rows to write to a PNG file."""
-        return NotImplemented
-
-
-class AbsoluteColorMap(ColorMap):
-    """A user-defined colormap mapping absolute values to colors."""
-
-    def __init__(self, colors):
-        """Initialise a new color map."""
-        self.default = self._parse_html_color(colors.get('default', '#0000'))
-        self.colormap = {int(k): self._parse_html_color(c)
-                         for k, c in colors.items() if k.isdigit()}
-
-    def color_heatmap(self, dataset):
-        """Transform heatmap data into pixel rows to write to a PNG file."""
-        coord_data = dataset.by_coordinates(relative=False)
-        for y in range(dataset.bounds.height):
-            yield array('B', chain.from_iterable(
-                self.colormap.get(coord_data[(x, y)], self.default)
-                if (x, y) in coord_data else (0, 0, 0, 0)
-                for x in range(dataset.bounds.width)
-            ))
-
-
-class DefaultColorMap(ColorMap):
-    """The default greyscale colormap to use if no user-provided one exists."""
-
-    def color_heatmap(self, dataset):
-        """Transform heatmap data into pixel rows to write to a PNG file."""
-        coord_data = dataset.by_coordinates(relative=True)
-        for y in range(dataset.bounds.height):
-            yield array('B', map(round, chain.from_iterable(
-                (*((255 * coord_data[(x, y)],) * 3), 255)
-                if (x, y) in coord_data else (0, 0, 0, 0)
-                for x in range(dataset.bounds.width)
-            )))
+from visualise import (AbsoluteColorMap, DefaultColorMap, HeatmapDataSet,
+                       HeatmapPoint)
 
 
 def handle_args(custom_args=None):
     """Parse and return the script's command-line arguments using argparse."""
-    from argparse import ArgumentParser
-    from configparser import ConfigParser, ExtendedInterpolation
     Args = namedtuple('Args', 'x_column y_column value_column min_value '
                               'max_value output_file data_file color_map')
     parser = ArgumentParser(description='Create heatmaps from values '
@@ -187,9 +89,6 @@ def handle_args(custom_args=None):
 
 def main():
     """The script's main entry point."""
-    from csv import QUOTE_NONNUMERIC, DictReader as CSVDictReader
-    from png import Writer as PNGWriter
-
     args = handle_args()
     with (open(args.data_file, 'rt')
           if args.data_file not in (None, '-')

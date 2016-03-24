@@ -3,10 +3,11 @@
 """Test the chunks.py script."""
 
 import unittest
-
 from itertools import product
 
 import chunks
+import chunks.common
+import scchunks as chunks_script
 
 
 class BitExtractorTest(unittest.TestCase):
@@ -16,14 +17,14 @@ class BitExtractorTest(unittest.TestCase):
         """Test bit extraction from zero."""
         for i, j in product(range(32), range(32)):
             with self.subTest(i=i, j=j):
-                self.assertEqual(chunks.extract_bits(0, i, j), 0)
+                self.assertEqual(chunks.common.extract_bits(0, i, j), 0)
 
     def test_extract_negative(self):
         """Test that extracting a negative number of bits raises an error."""
         for i, j, k in product(range(32), range(-32, 0), range(32)):
             with self.subTest(n=i, n_bits=j, offset=k):
                 with self.assertRaises(ValueError):
-                    chunks.extract_bits(i, j, k)
+                    chunks.common.extract_bits(i, j, k)
 
 
 class DirectoryTest(unittest.TestCase):
@@ -40,10 +41,10 @@ class ArgumentTest(unittest.TestCase):
     def test_supported_file_versions(self):
         """Test error checking in the -V/--file-version argument."""
         with self.assertRaises(SystemExit):
-            chunks.handle_args([], ['-V', '1.0', 'surface'])
+            chunks_script.handle_args([], ['-V', '1.0', 'surface'])
         with self.assertRaises(SystemExit):
-            chunks.handle_args([], ['-V', '', 'surface'])
-        args = chunks.handle_args([], ['-V', 'auto', 'surface'])
+            chunks_script.handle_args([], ['-V', '', 'surface'])
+        args = chunks_script.handle_args([], ['-V', 'auto', 'surface'])
         self.assertEqual(args.file_version, 'auto')
 
 
