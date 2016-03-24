@@ -97,7 +97,7 @@ class ChunksDecoder(metaclass=ABCMeta):
         This method must return a byte position to seek to from the start of
         the file.
         """
-        return NotImplemented
+        raise NotImplementedError
 
     def _assert_magic(self, actual_magic):
         """Throw a ValueError if the given magic does not match self.MAGIC."""
