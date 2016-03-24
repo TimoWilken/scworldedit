@@ -31,7 +31,10 @@ def extract_bits(n, n_bits, offset_from_lsb):
     The bits marked with ^ will be extracted. The offset is counted from the
     LSB, with the LSB itself having the offset 0.
     """
-    bitmask = (2**n_bits - 1) << offset_from_lsb
+    try:
+        bitmask = (2**n_bits - 1) << offset_from_lsb
+    except TypeError as err:
+        raise ValueError(err)
     return (n & bitmask) >> offset_from_lsb
 
 
