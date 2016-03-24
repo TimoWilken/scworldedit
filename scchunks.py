@@ -103,3 +103,5 @@ if __name__ == '__main__':
         sys.exit(main())
     except KeyboardInterrupt:
         sys.exit(130)
+    except BrokenPipeError:
+        sys.exit(0)     # We were piped into something that crashed.

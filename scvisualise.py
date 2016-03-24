@@ -94,12 +94,18 @@ def main():
           if args.data_file not in (None, '-')
           else sys.stdin) as data_file:
         data_reader = CSVDictReader(data_file, quoting=QUOTE_NONNUMERIC)
-        data = HeatmapDataSet(
-            (HeatmapPoint(round(row[args.x_column]), round(row[args.y_column]),
-                          round(row[args.value_column]))
-             for row in data_reader),
-            min_value=args.min_value, max_value=args.max_value
-        )
+        try:
+            data = HeatmapDataSet(
+                (HeatmapPoint(round(row[args.x_column]),
+                              round(row[args.y_column]),
+                              round(row[args.value_column]))
+                 for row in data_reader),
+                min_value=args.min_value, max_value=args.max_value
+            )
+        except KeyError as err:
+            print('Requested header "{}" was not found in input data. Try '
+                  'specifying -x/-y/-c.'.format(*err.args), file=sys.stderr)
+            return 1
     colormap = (DefaultColorMap() if args.color_map is None
                 else AbsoluteColorMap(args.color_map))
     writer = PNGWriter(width=data.bounds.width, height=data.bounds.height,
@@ -114,3 +120,5 @@ if __name__ == '__main__':
         sys.exit(main())
     except KeyboardInterrupt:
         sys.exit(130)
+    except BrokenPipeError:
+        sys.exit(0)     # We were piped into something that crashed.
