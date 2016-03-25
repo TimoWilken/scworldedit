@@ -1,17 +1,26 @@
 // All 0xnumbers in hex, 2 bits per hex digit.
-// x and y are in the horizontal plane, z is up/down.
+// in the following: x and y are in the horizontal plane, z is up/down.
 { 32bit x, 32bit y, 32bit offset } [65536],
-0x00000000, 0x00000000, 0x00000000,     // guard entry
 {
-    0xDEADBEEF, 0xFFFFFFFF,      // magic header, 2nd int is 0xFFFFFFFE in 1.29
-    32bit x, 32bit y,
-    { 8bit type, 8bit data } [32768],   // see BlocksData.xml
+    0x00000000, 0x00000000, 0x00000000 ||   // guard entry <=1.28
+    -1, -1, -1                              // guard entry >=1.29
+},
+{
+    {
+        0xDEADBEEF, 0xFFFFFFFF ||   // magic header <=1.28
+        0xDEADBEEF, 0xFFFFFFFE      // magic header >=1.29
+    },
+    32bit x, 32bit y,               // (magic, x, y) is the chunk header
+    { // see also BlocksData.xml
+        { 8bit type, 8bit data } [32768] ||             // Block <=1.28
+        { 10bit type, 4bit light, 18bit data } [32768]  // Block >=1.29
+    },
     { 8bit elevation, 4bit humidity, 4bit temp, 0x0000 } [256]
 } [0..65536]
 
 
 // All data little-endian.
-// x and z are in the horizontal plane, y is up/down.
+// in the following: x and z are in the horizontal plane, y is up/down.
 
 // A single entry in directory of chunks
 struct DirectoryEntry
@@ -54,7 +63,7 @@ struct SurfacePoint
 struct ChunkHeader
 {
     int Magic1;     // Must be 0xDEADBEEF  // EFBEADDE in little-endian!
-    int Magic2;     // Must be 0xFFFFFFFF
+    int Magic2;     // Must be 0xFFFFFFFF or 0xFFFFFFFE, dep. on version
     int ChunkX;     // Chunk position (1 unit equals 16 blocks, must be positive)
     int ChunkZ;     // Chunk position (1 unit equals 16 blocks, must be positive)
 }
