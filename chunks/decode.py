@@ -124,13 +124,8 @@ class ChunksDecoder(metaclass=ABCMeta):
             if index != self.INVALID_INDEX_VALUE
         ))
 
-    def read_blocks(self, chunksf, directory=None):
-        """Read the block data from the chunks file.
-
-        This calls the ChunksDecoder subclass's parse_block method to process
-        each block. You probably want to override it to process custom data.
-        See the parse_block docstring for more information.
-        """
+    def _read_section(self, chunksf, item_struct, parse_function, skip_size,
+                      read_size, directory=None):
         if directory is None:
             directory = self.read_directory(chunksf)
         for offset in directory:
@@ -138,11 +133,24 @@ class ChunksDecoder(metaclass=ABCMeta):
             magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
                 chunksf.read(self._chunk_header_struct.size))
             self._assert_magic(magic)
+            if skip_size:
+                chunksf.seek(skip_size, SEEK_CUR)
             yield from (
-                self.parse_block(i, chunk_x, chunk_y, data)
-                for i, data in enumerate(self._block_struct.iter_unpack(
-                    chunksf.read(self.blocks_size)))
+                parse_function(i, chunk_x, chunk_y, data)
+                for i, data in enumerate(item_struct.iter_unpack(
+                    chunksf.read(read_size)))
             )
+
+    def read_blocks(self, chunksf, directory=None):
+        """Read the block data from the chunks file.
+
+        This calls the ChunksDecoder subclass's parse_block method to process
+        each block. You probably want to override it to process custom data.
+        See the parse_block docstring for more information.
+        """
+        yield from self._read_section(chunksf, self._block_struct,
+                                      self.parse_block, 0, self.blocks_size,
+                                      directory)
 
     def read_surface(self, chunksf, directory=None):
         """Read the surface data from the chunks file.
@@ -152,20 +160,10 @@ class ChunksDecoder(metaclass=ABCMeta):
         override it to process custom data. See the parse_surface_point
         docstring for more information.
         """
-        if directory is None:
-            directory = self.read_directory(chunksf)
-        for offset in directory:
-            chunksf.seek(offset)
-            magic, chunk_x, chunk_y = self._chunk_header_struct.unpack(
-                chunksf.read(self._chunk_header_struct.size))
-            self._assert_magic(magic)
-            chunksf.seek(self.blocks_size, SEEK_CUR)
-            yield from (
-                self.parse_surface_point(i, chunk_x, chunk_y, data)
-                for i, data in enumerate(
-                    self._surface_point_struct.iter_unpack(
-                        chunksf.read(self.surface_size)))
-            )
+        yield from self._read_section(chunksf, self._surface_point_struct,
+                                      self.parse_surface_point,
+                                      self.blocks_size, self.surface_size,
+                                      directory)
 
     @abstractmethod
     def parse_block(self, i, chunk_x, chunk_y, data):
