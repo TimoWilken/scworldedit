@@ -27,7 +27,7 @@ class ColorMap(metaclass=ABCMeta):
             ["#RRGGBB", "#RGB", "#RRGGBBAA", "#RGBA"].
         """
         color = color.translate({ord('#'): None})
-        cl = {8: 2, 6: 2, 4: 1, 3: 1}[len(color)]  # len of one RGBA component
+        cl = len(color) // 3  # len of one RGBA component
         r, g, b, a = color[:cl], color[cl:2*cl], color[2*cl:3*cl], color[3*cl:]
         if cl == 1:
             r, g, b, a = map(lambda c: 2*c, (r, g, b, a))
