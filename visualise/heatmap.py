@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """Visualise three-dimensional integer data using heatmaps.
 

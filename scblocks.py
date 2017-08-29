@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """Read BlocksData.xml and make block information searchable."""
 

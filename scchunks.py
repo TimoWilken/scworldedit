@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """Decode and encode Survivalcraft's Chunks.dat and Chunks32.dat files."""
 

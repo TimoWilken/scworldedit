@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """Read and write Survivalcraft Chunks.dat and Chunks32.dat files.
 
